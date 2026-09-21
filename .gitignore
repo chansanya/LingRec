@@ -1,0 +1,40 @@
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Java / Maven
+**/target/
+*.class
+*.jar
+*.war
+*.ear
+
+# Python
+**/.venv/
+**/venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+application-local.yml
+application-local.yaml
+
+# Logs and profiling
+*.log
+*.jfr
+hs_err_pid*
+
+# Codex temporary artifacts
+.codex-doc-review/
+
+# Operating system
+.DS_Store
+Thumbs.db
+Desktop.ini

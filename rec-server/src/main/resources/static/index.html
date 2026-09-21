@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LingRec</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <link rel="stylesheet" href="style.css?v=20260921-4">
+</head>
+<body>
+    <div id="app" v-cloak>
+        <el-container class="layout-container">
+            <el-header class="header">
+                <div class="logo">
+                    <span class="logo-mark"><app-icon name="Sparkles" :size="20"></app-icon></span>
+                    <span class="logo-text">LingRec</span>
+                </div>
+                <div class="header-actions">
+                    <el-select
+                        v-model="currentUserId"
+                        placeholder="切换模拟用户"
+                        @change="switchUser"
+                        class="user-select">
+                        <el-option
+                            v-for="user in users"
+                            :key="user.id"
+                            :label="user.nickname"
+                            :value="user.id">
+                        </el-option>
+                    </el-select>
+                    <el-button type="primary" @click="loadRecommendations()">
+                        <app-icon name="RefreshCw" :size="16"></app-icon>
+                        <span>刷新推荐</span>
+                    </el-button>
+                </div>
+            </el-header>
+
+            <el-container class="main-container">
+                <el-aside width="310px" class="sidebar">
+                    <el-card class="user-card" shadow="never">
+                        <div class="user-info" v-if="currentUser">
+                            <div class="avatar">
+                                <app-icon :name="currentUser.avatar || 'UserRound'" :size="28"></app-icon>
+                            </div>
+                            <div class="details">
+                                <div class="nickname">{{ currentUser.nickname }}</div>
+                                <div class="join-date">加入时间 {{ formatDate(currentUser.createdAt) }}</div>
+                            </div>
+                        </div>
+                        <el-skeleton v-else :rows="2" animated></el-skeleton>
+                    </el-card>
+
+                    <el-card class="stats-card" shadow="never">
+                        <template #header>
+                            <div class="card-header"><span>行为统计</span></div>
+                        </template>
+                        <el-row :gutter="12" class="stats-row">
+                            <el-col :span="8">
+                                <el-statistic :value="userStats.VIEW || 0">
+                                    <template #title><span class="stat-title"><app-icon name="Eye" :size="14"></app-icon>浏览</span></template>
+                                </el-statistic>
+                            </el-col>
+                            <el-col :span="8">
+                                <el-statistic :value="userStats.LIKE || 0">
+                                    <template #title><span class="stat-title"><app-icon name="Heart" :size="14"></app-icon>点赞</span></template>
+                                </el-statistic>
+                            </el-col>
+                            <el-col :span="8">
+                                <el-statistic :value="userStats.FAVORITE || 0">
+                                    <template #title><span class="stat-title"><app-icon name="Star" :size="14"></app-icon>收藏</span></template>
+                                </el-statistic>
+                            </el-col>
+                        </el-row>
+                    </el-card>
+
+                    <el-card class="chart-card" shadow="never">
+                        <template #header>
+                            <div class="card-header"><span>兴趣画像</span></div>
+                        </template>
+                        <div id="interest-chart" class="chart-container"></div>
+                    </el-card>
+
+                    <el-card class="actions-card" shadow="never">
+                        <template #header>
+                            <div class="card-header"><span>最近行为</span></div>
+                        </template>
+                        <div class="timeline-container">
+                            <el-timeline v-if="recentBehaviors.length > 0">
+                                <el-timeline-item
+                                    v-for="behavior in recentBehaviors"
+                                    :key="behavior.id"
+                                    :type="getBehaviorType(behavior.action)"
+                                    :timestamp="formatTime(behavior.createdAt)"
+                                    size="small">
+                                    <div class="behavior-line">
+                                        <span>{{ getActionLabel(behavior.action) }}</span>
+                                        <strong>{{ behavior.resourceTitle }}</strong>
+                                    </div>
+                                    <el-tag
+                                        size="small"
+                                        class="behavior-tag"
+                                        :type="getCategoryTagType(behavior.parentCategoryName)">
+                                        {{ behavior.parentCategoryName }} / {{ behavior.categoryName }}
+                                    </el-tag>
+                                </el-timeline-item>
+                            </el-timeline>
+                            <el-empty v-else description="暂无行为数据" :image-size="60"></el-empty>
+                        </div>
+                    </el-card>
+                </el-aside>
+
+                <el-main class="main-content">
+                    <section class="recommendation-header">
+                        <div>
+                            <p class="eyebrow">PERSONALIZED FEED</p>
+                            <h1>推荐资源</h1>
+                            <p class="recommendation-subtitle">切换用户和资源类型，观察行为如何改变兴趣画像与推荐结果。</p>
+                        </div>
+                        <div class="result-count">{{ recommendations.length }} 条结果</div>
+                    </section>
+
+                    <el-tabs
+                        v-model="selectedParentCategory"
+                        @tab-click="handleParentTabClick"
+                        class="category-tabs">
+                        <el-tab-pane label="全部" name="all">
+                            <template #label><span class="category-tab-label"><app-icon name="Layers3" :size="16"></app-icon>全部</span></template>
+                        </el-tab-pane>
+                        <el-tab-pane
+                            v-for="category in categories"
+                            :key="category.id"
+                            :name="category.id.toString()">
+                            <template #label>
+                                <span class="category-tab-label">
+                                    <app-icon :name="category.icon || 'Folder'" :size="16"></app-icon>
+                                    {{ category.name }}
+                                </span>
+                            </template>
+                        </el-tab-pane>
+                    </el-tabs>
+
+                    <div v-if="childCategories.length > 0" class="child-category-filter">
+                        <span class="filter-label">细分类型</span>
+                        <el-button
+                            size="small"
+                            round
+                            :type="selectedChildCategory === 'all' ? 'primary' : 'default'"
+                            :plain="selectedChildCategory !== 'all'"
+                            @click="selectChildCategory('all')">
+                            全部小类
+                        </el-button>
+                        <el-button
+                            v-for="category in childCategories"
+                            :key="category.id"
+                            size="small"
+                            round
+                            :type="selectedChildCategory === category.id.toString() ? 'primary' : 'default'"
+                            :plain="selectedChildCategory !== category.id.toString()"
+                            @click="selectChildCategory(category.id)">
+                            {{ category.name }}
+                        </el-button>
+                    </div>
+
+                    <div class="resource-scroll" v-loading="loading">
+                        <div class="resource-grid">
+                        <el-empty
+                            v-if="!loading && recommendations.length === 0"
+                            description="当前类型暂无推荐资源">
+                        </el-empty>
+
+                        <el-card
+                            v-for="item in recommendations"
+                            :key="item.id"
+                            class="resource-card"
+                            shadow="never"
+                            :body-style="{ padding: '0px' }"
+                            @click="handleResourceClick(item)">
+                            <div class="card-image-wrapper">
+                                <el-image :src="item.coverUrl" class="resource-image" fit="cover">
+                                    <template #error>
+                                        <div class="image-slot"><app-icon name="ImageOff" :size="30"></app-icon></div>
+                                    </template>
+                                </el-image>
+                                <div class="heat-badge"><app-icon name="Flame" :size="13"></app-icon>{{ item.heat }}</div>
+                            </div>
+
+                            <div class="resource-info">
+                                <div class="resource-title">{{ item.title }}</div>
+                                <div class="resource-meta">
+                                    <el-tag size="small" effect="plain" :type="getCategoryTagType(item.parentCategoryName)">
+                                        {{ item.parentCategoryName }} / {{ item.categoryName }}
+                                    </el-tag>
+                                </div>
+                                <div class="resource-desc">{{ item.description }}</div>
+
+                                <div class="resource-actions" @click.stop>
+                                    <el-tooltip content="记录浏览" placement="top">
+                                        <el-button
+                                            circle
+                                            :type="hasInteracted(item.id, 'VIEW') ? 'primary' : 'default'"
+                                            plain
+                                            aria-label="记录浏览"
+                                            @click="recordBehavior(item.id, 'VIEW')">
+                                            <app-icon name="Eye" :size="16"></app-icon>
+                                        </el-button>
+                                    </el-tooltip>
+                                    <el-tooltip content="记录点赞" placement="top">
+                                        <el-button
+                                            circle
+                                            :type="hasInteracted(item.id, 'LIKE') ? 'danger' : 'default'"
+                                            :plain="!hasInteracted(item.id, 'LIKE')"
+                                            aria-label="记录点赞"
+                                            @click="recordBehavior(item.id, 'LIKE')">
+                                            <app-icon name="Heart" :size="16"></app-icon>
+                                        </el-button>
+                                    </el-tooltip>
+                                    <el-tooltip content="记录收藏" placement="top">
+                                        <el-button
+                                            circle
+                                            :type="hasInteracted(item.id, 'FAVORITE') ? 'warning' : 'default'"
+                                            :plain="!hasInteracted(item.id, 'FAVORITE')"
+                                            aria-label="记录收藏"
+                                            @click="recordBehavior(item.id, 'FAVORITE')">
+                                            <app-icon name="Star" :size="16"></app-icon>
+                                        </el-button>
+                                    </el-tooltip>
+                                </div>
+                            </div>
+                        </el-card>
+                        </div>
+                    </div>
+                </el-main>
+            </el-container>
+
+        </el-container>
+    </div>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://unpkg.com/element-plus"></script>
+    <script src="https://unpkg.com/lucide@1.47.0/dist/umd/lucide.min.js"></script>
+    <script src="https://unpkg.com/echarts@5/dist/echarts.min.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script src="app.js?v=20260921-1"></script>
+</body>
+</html>

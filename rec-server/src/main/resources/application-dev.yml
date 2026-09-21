@@ -1,0 +1,10 @@
+spring:
+  web:
+    resources:
+      static-locations:
+        - file:./src/main/resources/static/
+        - classpath:/static/
+      cache:
+        period: 0
+      chain:
+        cache: false

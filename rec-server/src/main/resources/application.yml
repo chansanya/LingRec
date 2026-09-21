@@ -1,0 +1,45 @@
+server:
+  port: 8899
+
+spring:
+  profiles:
+    active: dev
+  application:
+    name: rec-server
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:192.168.1.181}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:lingrec}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:}
+  sql:
+    init:
+      mode: always
+      encoding: UTF-8
+      schema-locations: classpath:schema.sql
+      continue-on-error: false
+  cache:
+    type: simple
+  web:
+    resources:
+      static-locations: ${STATIC_LOCATIONS:file:./static/,classpath:/static/}
+      cache:
+        period: ${STATIC_CACHE_PERIOD:0}
+      chain:
+        cache: ${STATIC_CHAIN_CACHE:false}
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+
+lingrec:
+  algorithm:
+    url: http://localhost:8000
+  generator:
+    enabled: true
+
+logging:
+  level:
+    com.lingrec: INFO
