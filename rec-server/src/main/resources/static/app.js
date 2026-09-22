@@ -32,17 +32,43 @@ const app = createApp({
         const users = ref([]);
         const categories = ref([]);
         const recommendations = ref([]);
+        const recommendationSessionId = ref(null);
+        const recommendationCursor = ref(0);
+        const recommendationTotal = ref(0);
+        const recommendationHasMore = ref(false);
         const userProfile = ref([]);
         const userStats = ref({ VIEW: 0, LIKE: 0, FAVORITE: 0 });
-        const recentBehaviors = ref([]);
+        const viewBehaviors = ref([]);
+        const likeBehaviors = ref([]);
+        const favoriteBehaviors = ref([]);
+        const activeBehaviorPanelKey = ref('VIEW');
+        const behaviorRecordsLoading = ref(false);
+        const likedResourceIds = ref(new Set());
+        const favoritedResourceIds = ref(new Set());
+        const viewedResourceIds = ref(new Set());
+        const submittingActions = ref(new Set());
         const selectedParentCategory = ref('all');
         const selectedChildCategory = ref('all');
         const loading = ref(false);
+        const loadingMoreRecommendations = ref(false);
+        const showBackTop = ref(false);
 
         let chartInstance = null;
         let recommendationRequestSerial = 0;
         let profileRequestSerial = 0;
         let behaviorRequestSerial = 0;
+        let loadMoreTimer = null;
+
+        const behaviorPanels = computed(() => [
+            { key: 'VIEW', title: '浏览', icon: 'Eye', items: viewBehaviors.value },
+            { key: 'LIKE', title: '点赞', icon: 'Heart', items: likeBehaviors.value },
+            { key: 'FAVORITE', title: '收藏', icon: 'Star', items: favoriteBehaviors.value }
+        ]);
+
+        const activeBehaviorPanel = computed(() =>
+            behaviorPanels.value.find(panel => panel.key === activeBehaviorPanelKey.value)
+            || behaviorPanels.value[0]
+        );
 
         const currentUser = computed(() => {
             return users.value.find(user => user.id === currentUserId.value) || null;
@@ -85,6 +111,19 @@ const app = createApp({
             '影视': ''
         };
 
+        const deduplicateResources = (items) => {
+            const seen = new Set(
+                recommendations.value.map(item => String(item.id))
+            );
+            return (Array.isArray(items) ? items : []).filter(item => {
+                if (!item || item.id == null) return false;
+                const resourceId = String(item.id);
+                if (seen.has(resourceId)) return false;
+                seen.add(resourceId);
+                return true;
+            });
+        };
+
         const loadUsers = async () => {
             try {
                 const response = await axios.get('/api/users');
@@ -112,6 +151,11 @@ const app = createApp({
             currentUserId.value = userId;
             selectedParentCategory.value = 'all';
             selectedChildCategory.value = 'all';
+            activeBehaviorPanelKey.value = 'VIEW';
+            likedResourceIds.value = new Set();
+            favoritedResourceIds.value = new Set();
+            viewedResourceIds.value = new Set();
+            submittingActions.value.clear();
             await Promise.all([
                 loadRecommendations(null, userId),
                 loadUserProfile(userId),
@@ -125,13 +169,25 @@ const app = createApp({
         ) => {
             if (!userId) return;
 
+            if (loadMoreTimer) {
+                clearTimeout(loadMoreTimer);
+                loadMoreTimer = null;
+            }
+            loadingMoreRecommendations.value = false;
+            showBackTop.value = false;
+
             const requestSerial = ++recommendationRequestSerial;
             loading.value = true;
             try {
                 const params = categoryId == null ? {} : { categoryId };
                 const response = await axios.get(`/api/recommend/${userId}`, { params });
                 if (requestSerial === recommendationRequestSerial && userId === currentUserId.value) {
-                    recommendations.value = response.data;
+                    const page = response.data;
+                    recommendations.value = deduplicateResources(page.items || []);
+                    recommendationSessionId.value = page.sessionId;
+                    recommendationCursor.value = page.nextCursor || 0;
+                    recommendationTotal.value = page.total || 0;
+                    recommendationHasMore.value = !!page.hasMore;
                 }
             } catch (error) {
                 if (requestSerial === recommendationRequestSerial) {
@@ -145,6 +201,63 @@ const app = createApp({
             }
         };
 
+        const loadMoreRecommendations = async () => {
+            const userId = currentUserId.value;
+            if (
+                !userId
+                || loading.value
+                || loadingMoreRecommendations.value
+                || !recommendationHasMore.value
+                || !recommendationSessionId.value
+            ) {
+                return;
+            }
+
+            loadingMoreRecommendations.value = true;
+            const requestSerial = recommendationRequestSerial;
+            try {
+                const response = await axios.get(`/api/recommend/${userId}/page`, {
+                    params: {
+                        sessionId: recommendationSessionId.value,
+                        cursor: recommendationCursor.value,
+                        size: 20
+                    }
+                });
+
+                if (requestSerial === recommendationRequestSerial && userId === currentUserId.value) {
+                    const page = response.data;
+                    const appended = deduplicateResources(page.items || []);
+                    recommendations.value = [...recommendations.value, ...appended];
+                    recommendationCursor.value = page.nextCursor || recommendationCursor.value;
+                    recommendationTotal.value = page.total || recommendationTotal.value;
+                    recommendationHasMore.value = !!page.hasMore;
+                }
+            } catch (error) {
+                if (requestSerial === recommendationRequestSerial) {
+                    console.error('Failed to load more recommendations', error);
+                    ElementPlus.ElMessage.error('加载更多资源失败');
+                }
+            } finally {
+                loadingMoreRecommendations.value = false;
+            }
+        };
+
+        const handleResourceScroll = (event) => {
+            const container = event.currentTarget;
+            showBackTop.value = container.scrollTop > 150;
+            const remaining = container.scrollHeight - container.scrollTop - container.clientHeight;
+            if (remaining <= 120) {
+                loadMoreRecommendations();
+            }
+        };
+
+        const scrollToTop = () => {
+            const container = document.querySelector('.resource-scroll');
+            if (container) {
+                container.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        };
+
         const loadUserProfile = async (userId = currentUserId.value) => {
             if (!userId) return;
 
@@ -155,6 +268,9 @@ const app = createApp({
 
                 userProfile.value = response.data.profile || [];
                 userStats.value = response.data.stats || { VIEW: 0, LIKE: 0, FAVORITE: 0 };
+                likedResourceIds.value = new Set((response.data.likedResourceIds || []).map(Number));
+                favoritedResourceIds.value = new Set((response.data.favoritedResourceIds || []).map(Number));
+                viewedResourceIds.value = new Set((response.data.viewedResourceIds || []).map(Number));
                 await nextTick();
                 renderChart();
             } catch (error) {
@@ -168,42 +284,86 @@ const app = createApp({
             if (!userId) return;
 
             const requestSerial = ++behaviorRequestSerial;
+            behaviorRecordsLoading.value = true;
             try {
-                const response = await axios.get(`/api/behaviors/${userId}`, {
-                    params: { limit: 20 }
-                });
+                const [views, likes, favorites] = await Promise.all([
+                    axios.get(`/api/behaviors/${userId}`, { params: { limit: 20, action: 'VIEW' } }),
+                    axios.get(`/api/behaviors/${userId}`, { params: { limit: 20, action: 'LIKE' } }),
+                    axios.get(`/api/behaviors/${userId}`, { params: { limit: 20, action: 'FAVORITE' } })
+                ]);
                 if (requestSerial === behaviorRequestSerial && userId === currentUserId.value) {
-                    recentBehaviors.value = response.data;
+                    viewBehaviors.value = views.data;
+                    likeBehaviors.value = likes.data;
+                    favoriteBehaviors.value = favorites.data;
                 }
             } catch (error) {
                 if (requestSerial === behaviorRequestSerial) {
                     console.error('Failed to load behaviors', error);
+                    ElementPlus.ElMessage.error('加载行为记录失败');
+                }
+            } finally {
+                if (requestSerial === behaviorRequestSerial) {
+                    behaviorRecordsLoading.value = false;
                 }
             }
         };
 
         const recordBehavior = async (resourceId, action) => {
             const userId = currentUserId.value;
-            if (!userId) return;
+            if (!userId || !resourceId || !action) return;
 
+            const numericResourceId = Number(resourceId);
+            const actionKey = `${numericResourceId}_${action}`;
+            if (submittingActions.value.has(actionKey)) return;
+
+            submittingActions.value.add(actionKey);
             try {
-                await axios.post('/api/behaviors', { userId, resourceId, action });
+                const response = await axios.post('/api/behaviors', {
+                    userId,
+                    resourceId: numericResourceId,
+                    action
+                });
                 if (userId !== currentUserId.value) return;
 
+                const isCancelled = response.data?.status === 'CANCELLED';
+                const actionLabel = getActionLabel(action);
+
+                if (action === 'LIKE') {
+                    if (isCancelled) {
+                        likedResourceIds.value.delete(numericResourceId);
+                    } else {
+                        likedResourceIds.value.add(numericResourceId);
+                    }
+                } else if (action === 'FAVORITE') {
+                    if (isCancelled) {
+                        favoritedResourceIds.value.delete(numericResourceId);
+                    } else {
+                        favoritedResourceIds.value.add(numericResourceId);
+                    }
+                } else if (action === 'VIEW') {
+                    viewedResourceIds.value.add(numericResourceId);
+                }
+
+                const target = recommendations.value.find(item => Number(item.id) === numericResourceId);
+                if (target && response.data?.heat != null) {
+                    target.heat = response.data.heat;
+                }
+
                 ElementPlus.ElMessage({
-                    message: `${getActionLabel(action)}已记录`,
-                    type: 'success',
+                    message: isCancelled ? `已取消${actionLabel}` : `${actionLabel}已记录`,
+                    type: isCancelled ? 'info' : 'success',
                     duration: 1600
                 });
 
                 await Promise.all([
                     loadUserProfile(userId),
-                    loadBehaviors(userId),
-                    loadRecommendations(activeCategoryId.value, userId)
+                    loadBehaviors(userId)
                 ]);
             } catch (error) {
                 console.error('Failed to record behavior', error);
-                ElementPlus.ElMessage.error(error.response?.data?.message || '行为记录失败');
+                ElementPlus.ElMessage.error(error.response?.data?.message || '操作失败');
+            } finally {
+                submittingActions.value.delete(actionKey);
             }
         };
 
@@ -311,9 +471,17 @@ const app = createApp({
         };
 
         const hasInteracted = (resourceId, action) => {
-            return recentBehaviors.value.some(
-                behavior => behavior.resourceId === resourceId && behavior.action === action
-            );
+            const id = Number(resourceId);
+            if (action === 'LIKE') {
+                return likedResourceIds.value.has(id);
+            }
+            if (action === 'FAVORITE') {
+                return favoritedResourceIds.value.has(id);
+            }
+            if (action === 'VIEW') {
+                return viewedResourceIds.value.has(id);
+            }
+            return false;
         };
 
         const handleResize = () => {
@@ -327,6 +495,7 @@ const app = createApp({
 
         onBeforeUnmount(() => {
             window.removeEventListener('resize', handleResize);
+            if (loadMoreTimer) clearTimeout(loadMoreTimer);
             if (chartInstance) chartInstance.dispose();
         });
 
@@ -337,23 +506,35 @@ const app = createApp({
             currentUser,
             childCategories,
             recommendations,
+            recommendationTotal,
+            recommendationHasMore,
             userStats,
-            recentBehaviors,
+            behaviorPanels,
+            activeBehaviorPanel,
+            activeBehaviorPanelKey,
+            behaviorRecordsLoading,
             selectedParentCategory,
             selectedChildCategory,
             loading,
+            loadingMoreRecommendations,
             switchUser,
             loadRecommendations,
             recordBehavior,
             handleParentTabClick,
             selectChildCategory,
             handleResourceClick,
+            handleResourceScroll,
+            showBackTop,
+            scrollToTop,
             formatDate,
             formatTime,
             getBehaviorType,
             getActionLabel,
             getCategoryTagType,
-            hasInteracted
+            hasInteracted,
+            likedResourceIds,
+            favoritedResourceIds,
+            viewedResourceIds
         };
     }
 });

@@ -2,6 +2,7 @@ package com.lingrec.controller;
 
 import com.lingrec.mapper.CategoryMapper;
 import com.lingrec.model.entity.Category;
+import com.lingrec.model.enums.ActionType;
 import com.lingrec.service.BehaviorService;
 import com.lingrec.service.ProfileService;
 import com.lingrec.service.UserService;
@@ -28,7 +29,7 @@ public class UserController {
     /**
      * 查询操作面板可切换的全部模拟用户。
      *
-     * @return 用户实体列表
+     * @return 包含系统内所有模拟用户实体的列表
      */
     @GetMapping("/users")
     public Object getUsers() {
@@ -36,16 +37,19 @@ public class UserController {
     }
 
     /**
-     * 查询用户基础信息、行为统计和按资源小类计算的兴趣画像。
+     * 查询用户基础信息、行为统计、小类兴趣画像以及点赞/收藏/浏览的去重资源 ID 集合。
      *
      * @param id 用户主键
-     * @return 包含 user、stats 和 profile 三部分的用户画像响应
+     * @return 包含 user、stats、profile、likedResourceIds、favoritedResourceIds 和 viewedResourceIds 的用户画像响应
      */
     @GetMapping("/users/{id}/profile")
     public Map<String, Object> getUserProfile(@PathVariable Long id) {
         Map<String, Object> result = new HashMap<>();
         result.put("user", userService.getUserById(id));
         result.put("stats", behaviorService.getBehaviorStats(id));
+        result.put("likedResourceIds", behaviorService.getInteractedResourceIds(id, ActionType.LIKE));
+        result.put("favoritedResourceIds", behaviorService.getInteractedResourceIds(id, ActionType.FAVORITE));
+        result.put("viewedResourceIds", behaviorService.getInteractedResourceIds(id, ActionType.VIEW));
 
         Map<Long, Category> categoryMap = categoryMapper.selectList(null).stream()
                 .collect(Collectors.toMap(Category::getId, category -> category));

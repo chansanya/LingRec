@@ -19,6 +19,14 @@ spring:
       continue-on-error: false
   cache:
     type: simple
+  redis:
+    host: ${REDIS_HOST:192.168.1.181}
+    port: ${REDIS_PORT:6379}
+    database: ${REDIS_DATABASE:15}
+    password: ${REDIS_PASSWORD:1223}
+    timeout: 3000ms
+    lettuce:
+      shutdown-timeout: 200ms
   web:
     resources:
       static-locations: ${STATIC_LOCATIONS:file:./static/,classpath:/static/}
@@ -37,6 +45,13 @@ mybatis-plus:
 lingrec:
   algorithm:
     url: http://localhost:8000
+  recommend:
+    candidate-pool-limit: 1000
+    hot-candidate-limit: 400
+    fresh-candidate-limit: 200
+    interest-candidate-limit: 300
+    session-ttl-seconds: 600
+    page-size: 20
   generator:
     enabled: true
 

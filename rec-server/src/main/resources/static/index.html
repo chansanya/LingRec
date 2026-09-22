@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LingRec</title>
     <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
-    <link rel="stylesheet" href="style.css?v=20260921-4">
+    <link rel="stylesheet" href="style.css?v=20260922-6">
 </head>
 <body>
     <div id="app" v-cloak>
@@ -80,20 +80,41 @@
                         <div id="interest-chart" class="chart-container"></div>
                     </el-card>
 
-                    <el-card class="actions-card" shadow="never">
+                    <el-card class="behavior-card" shadow="never">
                         <template #header>
-                            <div class="card-header"><span>最近行为</span></div>
+                            <div class="card-header behavior-card-title">
+                                <span>行为记录</span>
+                                <span class="active-behavior-count">
+                                    {{ activeBehaviorPanel.items.length }} 条
+                                </span>
+                            </div>
                         </template>
-                        <div class="timeline-container">
-                            <el-timeline v-if="recentBehaviors.length > 0">
+
+                        <div class="behavior-tabs" role="tablist" aria-label="行为记录类型">
+                            <button
+                                v-for="panel in behaviorPanels"
+                                :key="panel.key"
+                                type="button"
+                                class="behavior-tab"
+                                :class="{ 'is-active': activeBehaviorPanelKey === panel.key }"
+                                :aria-selected="activeBehaviorPanelKey === panel.key"
+                                role="tab"
+                                @click="activeBehaviorPanelKey = panel.key">
+                                <app-icon :name="panel.icon" :size="15"></app-icon>
+                                <span>{{ panel.title }}</span>
+                            </button>
+                        </div>
+
+                        <div class="timeline-container" v-loading="behaviorRecordsLoading">
+                            <el-timeline v-if="activeBehaviorPanel.items.length > 0">
                                 <el-timeline-item
-                                    v-for="behavior in recentBehaviors"
+                                    v-for="behavior in activeBehaviorPanel.items"
                                     :key="behavior.id"
-                                    :type="getBehaviorType(behavior.action)"
+                                    :type="getBehaviorType(activeBehaviorPanel.key)"
                                     :timestamp="formatTime(behavior.createdAt)"
                                     size="small">
                                     <div class="behavior-line">
-                                        <span>{{ getActionLabel(behavior.action) }}</span>
+                                        <span>{{ activeBehaviorPanel.title }}</span>
                                         <strong>{{ behavior.resourceTitle }}</strong>
                                     </div>
                                     <el-tag
@@ -104,7 +125,11 @@
                                     </el-tag>
                                 </el-timeline-item>
                             </el-timeline>
-                            <el-empty v-else description="暂无行为数据" :image-size="60"></el-empty>
+                            <el-empty
+                                v-else
+                                :description="`暂无${activeBehaviorPanel.title}记录`"
+                                :image-size="52">
+                            </el-empty>
                         </div>
                     </el-card>
                 </el-aside>
@@ -116,7 +141,7 @@
                             <h1>推荐资源</h1>
                             <p class="recommendation-subtitle">切换用户和资源类型，观察行为如何改变兴趣画像与推荐结果。</p>
                         </div>
-                        <div class="result-count">{{ recommendations.length }} 条结果</div>
+                        <div class="result-count">{{ recommendations.length }} / {{ recommendationTotal }} 条结果</div>
                     </section>
 
                     <el-tabs
@@ -161,7 +186,10 @@
                         </el-button>
                     </div>
 
-                    <div class="resource-scroll" v-loading="loading">
+                    <div
+                        class="resource-scroll"
+                        v-loading="loading"
+                        @scroll="handleResourceScroll">
                         <div class="resource-grid">
                         <el-empty
                             v-if="!loading && recommendations.length === 0"
@@ -204,22 +232,22 @@
                                             <app-icon name="Eye" :size="16"></app-icon>
                                         </el-button>
                                     </el-tooltip>
-                                    <el-tooltip content="记录点赞" placement="top">
+                                    <el-tooltip :content="hasInteracted(item.id, 'LIKE') ? '取消点赞' : '点赞'" placement="top">
                                         <el-button
                                             circle
                                             :type="hasInteracted(item.id, 'LIKE') ? 'danger' : 'default'"
                                             :plain="!hasInteracted(item.id, 'LIKE')"
-                                            aria-label="记录点赞"
+                                            :aria-label="hasInteracted(item.id, 'LIKE') ? '取消点赞' : '点赞'"
                                             @click="recordBehavior(item.id, 'LIKE')">
                                             <app-icon name="Heart" :size="16"></app-icon>
                                         </el-button>
                                     </el-tooltip>
-                                    <el-tooltip content="记录收藏" placement="top">
+                                    <el-tooltip :content="hasInteracted(item.id, 'FAVORITE') ? '取消收藏' : '收藏'" placement="top">
                                         <el-button
                                             circle
                                             :type="hasInteracted(item.id, 'FAVORITE') ? 'warning' : 'default'"
                                             :plain="!hasInteracted(item.id, 'FAVORITE')"
-                                            aria-label="记录收藏"
+                                            :aria-label="hasInteracted(item.id, 'FAVORITE') ? '取消收藏' : '收藏'"
                                             @click="recordBehavior(item.id, 'FAVORITE')">
                                             <app-icon name="Star" :size="16"></app-icon>
                                         </el-button>
@@ -228,7 +256,37 @@
                             </div>
                         </el-card>
                         </div>
+
+                        <div
+                            v-if="recommendations.length > 0"
+                            class="resource-load-status">
+                            <template v-if="loadingMoreRecommendations">
+                                <app-icon name="LoaderCircle" :size="15" class="load-more-spinning"></app-icon>
+                                <span>正在加载更多资源</span>
+                            </template>
+                            <template v-else-if="recommendationHasMore">
+                                <app-icon name="ChevronsDown" :size="15"></app-icon>
+                                <span>继续向下滚动加载更多</span>
+                            </template>
+                            <template v-else>
+                                <app-icon name="CircleCheck" :size="15"></app-icon>
+                                <span>已加载全部 {{ recommendationTotal }} 条资源</span>
+                            </template>
+                        </div>
                     </div>
+
+                    <transition name="back-top-fade">
+                        <el-tooltip content="回到顶部" placement="left">
+                            <button
+                                v-show="showBackTop"
+                                type="button"
+                                class="back-to-top-btn"
+                                aria-label="回到顶部"
+                                @click="scrollToTop">
+                                <app-icon name="ArrowUp" :size="20"></app-icon>
+                            </button>
+                        </el-tooltip>
+                    </transition>
                 </el-main>
             </el-container>
 
@@ -240,6 +298,6 @@
     <script src="https://unpkg.com/lucide@1.47.0/dist/umd/lucide.min.js"></script>
     <script src="https://unpkg.com/echarts@5/dist/echarts.min.js"></script>
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
-    <script src="app.js?v=20260921-1"></script>
+    <script src="app.js?v=20260922-8"></script>
 </body>
 </html>

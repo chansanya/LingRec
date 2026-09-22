@@ -14,7 +14,7 @@ class Recommender:
     W_DIVERSITY = 0.15  # 多样性惩罚 (Diversity penalty for same category)
     
     def recommend(self, request: RecommendRequest) -> RecommendResponse:
-        """主入口：召回 + 排序，返回Top20资源ID (Main entry: recall + rank, return top 20 resource IDs)"""
+        """主入口：召回并排序当前范围内的全部候选资源 ID。"""
         try:
             if not request.candidates:
                 logger.warning(f"用户 {request.userId} 的候选资源列表为空")
@@ -31,8 +31,8 @@ class Recommender:
             # 2. 排序阶段 (Rank phase)
             ranked = self._rank(recalled, request)
             
-            # 3. 返回Top20 (Return top 20)
-            top_ids = [r.id for r in ranked[:20]]
+            # 3. 返回完整排序序列，由前端按批次展示
+            top_ids = [r.id for r in ranked]
             return RecommendResponse(resourceIds=top_ids, strategy="personalized")
         except Exception as e:
             logger.error(f"推荐计算过程出错: {e}", exc_info=True)
@@ -42,7 +42,7 @@ class Recommender:
     def _cold_start(self, request: RecommendRequest) -> RecommendResponse:
         """冷启动：对于没有画像的新用户，返回按热度排序的资源"""
         sorted_by_heat = sorted(request.candidates, key=lambda x: x.heat, reverse=True)
-        ids = [r.id for r in sorted_by_heat[:20]]
+        ids = [r.id for r in sorted_by_heat]
         return RecommendResponse(resourceIds=ids, strategy="cold_start_hot")
     
     def _recall(self, request: RecommendRequest) -> List[ResourceItem]:
@@ -64,12 +64,12 @@ class Recommender:
         # 合并并去重 (Merge and deduplicate)
         seen = set()
         merged = []
-        for r in interest_recalled + hot_recalled + diversity_recalled:
+        for r in interest_recalled + hot_recalled + diversity_recalled + candidates:
             if r.id not in seen:
                 seen.add(r.id)
                 merged.append(r)
         
-        logger.debug(f"召回结果: 兴趣={len(interest_recalled)}, 热门={len(hot_recalled)}, 探索={len(diversity_recalled)}, 去重后总计={len(merged)}")
+        logger.debug(f"召回结果: 兴趣={len(interest_recalled)}, 热门={len(hot_recalled)}, 探索={len(diversity_recalled)}, 完整候选={len(candidates)}, 去重后总计={len(merged)}")
         return merged
     
     def _rank(self, candidates: List[ResourceItem], request: RecommendRequest) -> List[ResourceItem]:
