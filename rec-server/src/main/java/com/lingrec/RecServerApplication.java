@@ -7,7 +7,7 @@ import org.springframework.cache.annotation.EnableCaching;
 
 @SpringBootApplication
 @EnableCaching
-@MapperScan("com.lingrec.mapper")
+@MapperScan({"com.lingrec.mapper", "com.lingrec.starter.mapper"})
 public class RecServerApplication {
     /**
      * 启动 LingRec 推荐服务并初始化 Spring 应用上下文。

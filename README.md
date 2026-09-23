@@ -176,39 +176,54 @@ STATIC_LOCATIONS=file:D:/lingrec/static/,classpath:/static/
 
 外部目录必须放在 `classpath:/static/` 前面，保证外部文件优先。
 
-## 项目结构
+## 项目结构（V3 多模块 SDK 架构）
 
 ```text
 LingRec/
-├── rec-server/
-│   ├── pom.xml
+├── pom.xml                           # 根聚合 POM 与全局依赖管理
+├── lingrec-core/                     # 核心契约与 SPI 抽象模块
+│   └── src/main/java/com/lingrec/core/
+│       ├── client/                   # AlgorithmClient 算法通信契约
+│       ├── enums/                    # ActionType 行为权重枚举
+│       ├── model/                    # ResourceItem / BehaviorResult 等通用模型
+│       └── spi/                      # ResourceItemProvider 全闭环数据源 SPI
+├── lingrec-spring-boot-starter/      # 嵌入式推荐引擎 Starter 模块
 │   └── src/main/
-│       ├── java/com/lingrec/
-│       │   ├── config/        # 通用配置
-│       │   ├── controller/    # REST 接口
-│       │   ├── generator/     # Demo 数据生成器
-│       │   ├── mapper/        # MyBatis-Plus Mapper
-│       │   ├── model/         # 实体、DTO、枚举
-│       │   └── service/       # 推荐业务逻辑
+│       ├── java/com/lingrec/starter/
+│       │   ├── config/               # LingRecAutoConfiguration & LingRecProperties
+│       │   ├── template/             # LingRecTemplate 面向宿主工程的统一门面
+│       │   ├── provider/             # DefaultResourceItemProvider 默认标准表 SPI 实现
+│       │   ├── service/              # Behavior / Profile / Recommend 三大核心引擎
+│       │   ├── mapper/               # 内置标准表 Mapper
+│       │   └── entity/               # 内置标准表持久化实体
 │       └── resources/
-│           ├── application.yml
-│           ├── schema.sql     # MySQL 建表脚本
-│           └── static/        # 操作面板
-├── rec-algorithm/             # Python 推荐算法
+│           ├── META-INF/             # Spring Boot 自动装配注册文件
+│           └── db/schema.sql         # 标准表初始化 DDL
+├── rec-server/                       # 演示应用与管理台模块（依赖 Starter）
+│   └── src/main/
+│       ├── java/com/lingrec/         # REST Controller & 模拟数据生成器
+│       └── resources/static/         # Vue 3 + Element Plus + ECharts 操作面板
+├── rec-algorithm/                    # 独立部署的 Python 推荐算法服务
+│   ├── Dockerfile                    # 生产级多进程容器构建文件
+│   ├── docker-compose.yml            # 一键容器化编排文件
 │   ├── main.py
 │   ├── recommender.py
 │   ├── models.py
 │   └── requirements.txt
+├── docs/                             # 架构与全链路原理文档库
 └── README.md
 ```
 
 ## 详细运行与原理文档
 
-- [LingRecSys V2 运行说明与全链路调用原理](docs/LingRecSys_V2_运行说明.md)（推荐阅读，包含状态机翻转、分类隔离召回、双级缓存容灾及 Python 排序公式）
+- 🌟 [LingRecSys V3 嵌入式 Starter 架构与全闭环 SPI 接入指南](docs/LingRecSys_V3_SDK架构与SPI接入指南.md)（最新 SDK 架构、全闭环 SPI 挂接自有业务表实战、Docker 独立算法部署指南）
+- [LingRecSys V2 运行说明与全链路调用原理](docs/LingRecSys_V2_运行说明.md)（包含状态机翻转、分类隔离召回、双级缓存容灾及 Python 排序公式）
 - [LingRecSys V1 运行说明](docs/LingRecSys_V1_运行说明.md)
 
 ## 功能说明
 
+- **可插拔 Starter 与全闭环 SPI（V3）**：拆分为 `lingrec-core` + `lingrec-spring-boot-starter`，外部 Spring Boot 业务系统既可开箱即用默认表，也可仅实现 `ResourceItemProvider` 接口直接挂载自有的商品/文章/视频表，完整接管召回、详情、热度双向写回与画像重算
+- **Python 算法独立容器化（V3）**：提供 `Dockerfile` 与 `docker-compose.yml`，支持多 Worker 独立部署与健康检查，算法离线时 Java 端自动无缝触发热度降级
 - **行为状态机翻转（V2）**：点赞（LIKE）与收藏（FAVORITE）支持首次点击记录、二次点击自动取消；取消时自动物理删除记录、精准扣减对应资源热度（保底非负），并实时触发兴趣画像重算与视图 $O(1)$ 同步
 - **分类召回严格隔离（V2）**：彻底修复分类筛选下的跨类内容污染；当选择大类或小类时，热门、新鲜以及画像兴趣召回均严格锁定在目标分类范围内，杜绝跨大类渗透
 - **双级缓存容灾降级（V2）**：推荐会话快照优先写入 Redis，在 Redis 异常、超时或未配置时自动平滑降级至本地内存会话（`ConcurrentHashMap` + TTL），保证推荐服务 100% 高可用，无 500 报错

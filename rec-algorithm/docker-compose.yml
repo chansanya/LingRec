@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  rec-algorithm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: lingrec-algorithm:2.0.0
+    container_name: lingrec-algorithm
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

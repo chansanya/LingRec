@@ -1,15 +1,15 @@
 package com.lingrec.generator;
 
-import com.lingrec.mapper.CategoryMapper;
-import com.lingrec.mapper.ResourceMapper;
+import com.lingrec.core.enums.ActionType;
+import com.lingrec.core.model.BehaviorRequest;
 import com.lingrec.mapper.UserMapper;
-import com.lingrec.model.dto.BehaviorRequest;
-import com.lingrec.model.entity.Category;
-import com.lingrec.model.entity.Resource;
 import com.lingrec.model.entity.User;
-import com.lingrec.model.enums.ActionType;
-import com.lingrec.service.BehaviorService;
-import com.lingrec.service.ProfileService;
+import com.lingrec.starter.entity.Category;
+import com.lingrec.starter.entity.Resource;
+import com.lingrec.starter.mapper.CategoryMapper;
+import com.lingrec.starter.mapper.ResourceMapper;
+import com.lingrec.starter.service.BehaviorService;
+import com.lingrec.starter.service.ProfileService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;

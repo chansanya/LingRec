@@ -1,10 +1,10 @@
 package com.lingrec.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.lingrec.mapper.CategoryMapper;
-import com.lingrec.mapper.ResourceMapper;
-import com.lingrec.model.entity.Category;
-import com.lingrec.model.entity.Resource;
+import com.lingrec.starter.entity.Category;
+import com.lingrec.starter.entity.Resource;
+import com.lingrec.starter.mapper.CategoryMapper;
+import com.lingrec.starter.mapper.ResourceMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -15,6 +15,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * 演示工程资源服务，维护演示系统所需的分类层级检索与详情提取。
+ */
 @Service
 @RequiredArgsConstructor
 public class ResourceService {
@@ -83,91 +86,6 @@ public class ResourceService {
                 .collect(Collectors.toCollection(ArrayList::new));
         categoryIds.add(categoryId);
         return getByCategoryIds(categoryIds);
-    }
-
-    /**
-     * 解析候选资源应覆盖的分类主键集合。
-     *
-     * @param categoryId 可选分类主键；为空表示全部分类
-     * @return 分类主键集合；分类不存在时抛出 404 异常
-     */
-    public List<Long> resolveCategoryIds(Long categoryId) {
-        if (categoryId == null) {
-            return categoryMapper.selectList(null).stream()
-                    .map(Category::getId)
-                    .collect(Collectors.toList());
-        }
-
-        Category category = categoryMapper.selectById(categoryId);
-        if (category == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "分类不存在");
-        }
-
-        if (category.getParentId() != null) {
-            return Collections.singletonList(categoryId);
-        }
-
-        List<Long> categoryIds = categoryMapper.selectList(Wrappers.<Category>lambdaQuery()
-                        .eq(Category::getParentId, categoryId))
-                .stream()
-                .map(Category::getId)
-                .collect(Collectors.toCollection(ArrayList::new));
-        categoryIds.add(categoryId);
-        return categoryIds;
-    }
-
-    /**
-     * 按分类范围和数量上限查询热门候选资源。
-     *
-     * @param categoryIds 分类主键集合，可为空
-     * @param limit 最大返回条数
-     * @return 按热度降序排列的候选资源，最多 limit 条
-     */
-    public List<Resource> getHotCandidates(List<Long> categoryIds, int limit) {
-        if (categoryIds == null || categoryIds.isEmpty() || limit <= 0) {
-            return Collections.emptyList();
-        }
-        return resourceMapper.selectList(Wrappers.<Resource>lambdaQuery()
-                .in(Resource::getCategoryId, categoryIds)
-                .orderByDesc(Resource::getHeat)
-                .orderByDesc(Resource::getId)
-                .last("LIMIT " + limit));
-    }
-
-    /**
-     * 按分类范围和数量上限查询新鲜候选资源。
-     *
-     * @param categoryIds 分类主键集合，可为空
-     * @param limit 最大返回条数
-     * @return 按创建时间倒序排列的候选资源，最多 limit 条
-     */
-    public List<Resource> getFreshCandidates(List<Long> categoryIds, int limit) {
-        if (categoryIds == null || categoryIds.isEmpty() || limit <= 0) {
-            return Collections.emptyList();
-        }
-        return resourceMapper.selectList(Wrappers.<Resource>lambdaQuery()
-                .in(Resource::getCategoryId, categoryIds)
-                .orderByDesc(Resource::getCreatedAt)
-                .orderByDesc(Resource::getId)
-                .last("LIMIT " + limit));
-    }
-
-    /**
-     * 按兴趣分类和数量上限查询兴趣候选资源。
-     *
-     * @param interestCategoryIds 兴趣分类主键集合，可为空
-     * @param limit 最大返回条数
-     * @return 兴趣分类下按热度降序排列的候选资源，最多 limit 条
-     */
-    public List<Resource> getInterestCandidates(List<Long> interestCategoryIds, int limit) {
-        if (interestCategoryIds == null || interestCategoryIds.isEmpty() || limit <= 0) {
-            return Collections.emptyList();
-        }
-        return resourceMapper.selectList(Wrappers.<Resource>lambdaQuery()
-                .in(Resource::getCategoryId, interestCategoryIds)
-                .orderByDesc(Resource::getHeat)
-                .orderByDesc(Resource::getId)
-                .last("LIMIT " + limit));
     }
 
     /**

@@ -1,13 +1,15 @@
 package com.lingrec.controller;
 
-import com.lingrec.mapper.CategoryMapper;
-import com.lingrec.model.dto.BehaviorRequest;
-import com.lingrec.model.entity.Category;
-import com.lingrec.model.entity.Resource;
-import com.lingrec.model.entity.UserBehavior;
-import com.lingrec.model.enums.ActionType;
-import com.lingrec.service.BehaviorService;
+import com.lingrec.core.enums.ActionType;
+import com.lingrec.core.model.BehaviorRequest;
+import com.lingrec.core.model.BehaviorResult;
 import com.lingrec.service.ResourceService;
+import com.lingrec.starter.entity.Category;
+import com.lingrec.starter.entity.Resource;
+import com.lingrec.starter.entity.UserBehavior;
+import com.lingrec.starter.mapper.CategoryMapper;
+import com.lingrec.starter.service.BehaviorService;
+import com.lingrec.starter.template.LingRecTemplate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -28,10 +30,14 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * 用户行为控制层 REST 接口。
+ */
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
 public class BehaviorController {
+    private final LingRecTemplate lingRecTemplate;
     private final BehaviorService behaviorService;
     private final ResourceService resourceService;
     private final CategoryMapper categoryMapper;
@@ -43,8 +49,8 @@ public class BehaviorController {
      * @return 包含行为执行状态（RECORDED/CANCELLED）、当前激活态、更新后热度等字段的响应数据
      */
     @PostMapping("/behaviors")
-    public Map<String, Object> recordBehavior(@RequestBody BehaviorRequest request) {
-        return behaviorService.recordBehavior(request);
+    public BehaviorResult recordBehavior(@RequestBody BehaviorRequest request) {
+        return lingRecTemplate.recordBehavior(request);
     }
 
     /**
@@ -57,7 +63,7 @@ public class BehaviorController {
      * @throws ResponseStatusException 行为类型为空或不支持时抛出 400 异常
      */
     @DeleteMapping("/behaviors")
-    public Map<String, Object> cancelBehavior(
+    public BehaviorResult cancelBehavior(
             @RequestParam Long userId,
             @RequestParam Long resourceId,
             @RequestParam String action) {
@@ -70,7 +76,7 @@ public class BehaviorController {
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "仅支持 LIKE、FAVORITE 行为");
         }
-        return behaviorService.cancelBehavior(userId, resourceId, actionType);
+        return lingRecTemplate.cancelBehavior(userId, resourceId, actionType);
     }
 
     /**

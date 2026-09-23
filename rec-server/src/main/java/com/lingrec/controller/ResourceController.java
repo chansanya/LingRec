@@ -1,10 +1,10 @@
 package com.lingrec.controller;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.lingrec.mapper.CategoryMapper;
-import com.lingrec.model.entity.Category;
-import com.lingrec.model.entity.Resource;
 import com.lingrec.service.ResourceService;
+import com.lingrec.starter.entity.Category;
+import com.lingrec.starter.entity.Resource;
+import com.lingrec.starter.mapper.CategoryMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,6 +17,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * 资源与分类元数据查询控制器。
+ */
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
